@@ -30,7 +30,7 @@ theme_set(theme_light())
 ```
 
 ```{r}
-data <- read_excel('https://raw.githubusercontent.com/jefedigital/cuny-data-608-visual-analytics/raw/main/assignments/week-01/story-1-infrastructure/story-1-data.xlsx', sheet='analysis')
+data <- read_csv('https://raw.githubusercontent.com/jefedigital/cuny-data-608-visual-analytics/main/assignments/week-01/story-1-infrastructure/story-1-data.csv')
 ```
 
 ## Introduction
