@@ -1,0 +1,223 @@
+---
+title: 'Story 1 - Infrastructure'
+subtitle: 'DATA 608: Knowledge and Visual Analytics'
+author: 'Jeff Parks'
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    theme: united
+    code_folding: hide
+editor_options:
+  chunk_output_type: console
+  markdown: 
+    wrap: sentence
+---
+
+```{r setup, include=FALSE}
+# chunks
+knitr::opts_chunk$set(echo=TRUE, eval=TRUE, include=TRUE, 
+message=FALSE, warning=FALSE, fig.height=5, fig.align='center')
+
+# libraries
+library(tidyverse)
+library(readxl)
+library(patchwork)
+library(scales)
+
+# ggplot
+theme_set(theme_light())
+```
+
+```{r}
+data <- read_excel('story-1-data.xlsx', sheet='analysis')
+```
+
+## Introduction
+
+The provided contained data on the present allocation of the Infrastructure Investment and Jobs Act funding by State and Territory.
+
+This story explores the following questions:
+
+-   Is the allocation equitable based on the population of each of the States and Territories, or is bias apparent?
+-   Does the allocation favor the political interests of the Biden administration?
+
+## Data Preparation
+
+I brought in several additional data sources to help provide context such as Population, Gross Domestic Product (GDP) and Poverty Level by state.
+For simplicity I pulled these data points together in a single data table in excel and created some composites (such as per-capita and ranks.)
+
+The resulting variables were:
+
+-   state
+-   biden_win (flag 0 or 1)
+-   investment_b (total investment in billions)
+-   pop (total population)
+-   investment_pc (investment\_ per capita_b / pop)
+-   poverty_lvl (percentage of pop below poverty line)
+-   area_sqkm (total land area in sq km)
+-   gdp_m (state gdp in millions)
+-   gdp_pc (gdp / pop)
+-   gdp_rank (gdp ranked hi-lo 1-51)
+-   ipc_rank (investment_pc ranked hi-lo 1-51)
+-   gdp_pc_rank (gdp_pc ranked hi-lo 1-51)
+-   poverty_rank (poverty_level ranked lo-hi 1-51)
+
+## Analysis
+
+First, we can look at the total investment, grouped by states where Biden won or lost in the 2020 Presidential election.
+At first glance, there might appear to be disparity, as 55% of total infrastructure funds went to so-called Democratic 'Blue States'.
+
+```{r}
+df_sum <- data %>%
+  select(c(investment_b, biden_win)) %>%
+  group_by(biden_win) %>%
+  summarize(total_investment_b = sum(investment_b))
+
+plot_sum <- df_sum %>%
+  ggplot(aes(x=biden_win, y=total_investment_b, fill=factor(biden_win))) +
+  geom_bar(stat='identity', position='identity') +
+  scale_fill_manual(values = c('red','blue')) +
+  labs(x = "Total Investment by States Won ($B)", y = "Total Investment ($B)") +
+  geom_text(aes(label = paste0('$', round(total_investment_b,2))),
+            color='white', position = position_nudge(y = -4), hjust = .5, size=6) +
+  theme_minimal() +
+  theme(
+    plot.title = element_blank(),
+    axis.text.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.position = 'none'
+  )
+
+plot_sum
+```
+
+------------------------------------------------------------------------
+
+However when we start to look at state-by-state results and per-capita rates, a different picture seems to emerge.
+Looking at the bar graph on the right, only half of the Top 20 states ranked by Investment per Capital went for the Democrats in 2020.
+
+Perhaps there are some other useful criteria to understand the allocation of Infrastructure funds.
+The graph on the left shows the rank of the state in terms of GDP.
+Most of the states that received the highest level of funding were low- or mid-ranked for GDP, which suggest that financial need may have been more of a factor than political alignment.
+
+```{r}
+df_top <- data %>%
+  select(c('region','biden_win','investment_pc','gdp_m','area_sqkm','road_miles','gdp_rank', 'poverty_lvl', 'poverty_rank')) %>%
+  mutate(region = factor(region, levels = region[order(investment_pc)]),
+         gdp_m = round(gdp_m/1000,1),
+         investment_pc = round(investment_pc,0)) %>%
+  slice(1:20)
+
+inv_rank_right <- df_top %>%
+  ggplot(aes(x = region, y = investment_pc, fill=factor(biden_win))) +
+  geom_bar(stat = "identity", position = "identity") +
+  scale_fill_manual(values = c('red','blue')) +
+  coord_flip() +
+  scale_y_continuous(labels = abs) +
+  labs(x = "State", y = "Investment per Capita ($)") +
+  geom_text(aes(label = paste0('$', scales::comma(investment_pc))),
+            color='white', hjust=1.25, size=3) +
+  theme_minimal() +
+  theme(
+    plot.title = element_blank(),
+    axis.text.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.position = 'none',
+    axis.text.y = element_text(hjust = 0.5),
+    plot.margin = margin(5.5, 5.5, 5.5, 5.5)
+  )
+
+gdp_rank_left <- df_top %>%
+ggplot(aes(x = region, y = -gdp_m)) +
+  geom_bar(stat = "identity", position = "identity") +
+  coord_flip() +
+  scale_y_continuous(labels = abs) +
+  labs(x = "State", y = "GDP Rank") +
+  geom_text(aes(label = paste0(gdp_rank)),
+    color='white', position = position_nudge(y = 3), hjust = -0.1, size=3) +
+  theme_minimal() +
+  theme(
+    plot.title = element_blank(),
+    axis.text.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.position = 'none'
+  )
+
+gdp_rank_left + inv_rank_right
+```
+
+------------------------------------------------------------------------
+
+Similarly, we can examine the relationship between funding levels and other economic indicators, such as the percentage of a state's population living below the Federal Poverty Line.
+Here the relationship is not quite as strong, although four of some of the most impoverished states appear in the Top 20 for funding:
+
+```{r}
+poverty_rank_left <- df_top %>%
+  ggplot(aes(x = region, y = -poverty_lvl)) +
+  geom_bar(stat = "identity", position = "identity") +
+  coord_flip() +
+  scale_y_continuous(labels = abs) +
+  labs(x = "State", y = "Poverty Level % and Rank") +
+  geom_text(aes(label = paste0(poverty_lvl, '% (', poverty_rank, ')')),
+            color='white', hjust = -0.25, size=3) +
+  theme_minimal() +
+  theme(
+    plot.title = element_blank(),
+    axis.text.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.position = 'none'
+  )
+  
+poverty_rank_left + inv_rank_right
+```
+
+------------------------------------------------------------------------
+
+Total land size might also be a factor in a state's needs for Infrastructure support.
+In the left-side graph we have Top 20 states receiving funding along with their rank for total land area.
+With the exception of Alaska, this relationship does not seem particularly strong, possibly due to great differences in population density between smaller and larger states:
+
+```{r}
+area_sqkm_left <- df_top %>%
+  ggplot(aes(x = region, y = -area_sqkm)) +
+  geom_bar(stat = "identity", position = "identity") +
+  coord_flip() +
+  scale_y_continuous(labels = abs) +
+  labs(x = "State", y = "Land SqKm Rank") +
+  geom_text(aes(label = round(area_sqkm/1000,0)),
+            color='white', position = position_nudge(y = 3), hjust = -0.25, size=3) +
+  theme_minimal() +
+  theme(
+    plot.title = element_blank(),
+    axis.text.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.position = 'none'
+  )
+
+area_sqkm_left + inv_rank_right
+```
+
+## Sources
+
+2020 US Presidential Election Results <https://www.presidency.ucsb.edu/statistics/elections/2020>
+
+Population by State - US Census <https://www.census.gov/data/tables/time-series/demo/popest/2020s-state-total.html>
+
+Poverty Levels by State - US Census <https://www.census.gov/topics/income-poverty/poverty.html>
+
+Area by State - US Census <https://www.census.gov/geographies/reference-files/2010/geo/state-area.html>
